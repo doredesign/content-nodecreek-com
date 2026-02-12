@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import { CloudflareContext, getCloudflareContext } from '@opennextjs/cloudflare'
 import { GetPlatformProxyOptions } from 'wrangler'
 import { r2Storage } from '@payloadcms/storage-r2'
+import { Resend } from 'resend'
 
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
@@ -23,6 +24,9 @@ const cloudflare =
     ? await getCloudflareContextFromWrangler()
     : await getCloudflareContext({ async: true })
 
+// Initialize Resend
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
+
 export default buildConfig({
   admin: {
     user: Users.slug,
@@ -37,6 +41,25 @@ export default buildConfig({
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   db: sqliteD1Adapter({ binding: cloudflare.env.D1 }),
+  email: resend
+    ? {
+        fromName: process.env.EMAIL_FROM_NAME || 'Payload CMS',
+        fromAddress: process.env.EMAIL_FROM_ADDRESS || 'noreply@yourdomain.com',
+        transportOptions: resend,
+        transport: async (message) => {
+          if (!resend) return
+
+          await resend.emails.send({
+            from: `${message.from.name || 'Payload CMS'} <${message.from.address}>`,
+            to: Array.isArray(message.to) ? message.to.map((t) => t.address) : [message.to.address],
+            subject: message.subject,
+            html: message.html,
+            text: message.text,
+            reply_to: process.env.EMAIL_REPLY_TO || undefined,
+          })
+        },
+      }
+    : undefined,
   plugins: [
     r2Storage({
       bucket: cloudflare.env.R2 as any,
