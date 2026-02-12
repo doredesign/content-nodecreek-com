@@ -12,6 +12,8 @@ import { Resend } from 'resend'
 
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
+import { Websites } from './collections/Websites'
+import { Pages } from './collections/Pages'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -67,7 +69,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Media],
+  collections: [Users, Media, Websites, Pages],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

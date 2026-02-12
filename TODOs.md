@@ -1,0 +1,3 @@
+Plan a multi-tenant setup. That is, this one instance provides content for several websites. Each one has its own set of users that have access to only it. They don't have access to other users or websites. Each website may have several pages. A page may have several sections or... I'm really not sure how Payload CMS structures data so words fail me here.
+
+I created a webpage and page for it with super admin user A. I created user B with webpage admin access to that webpage. However, that user cannot see the page I made for that website. What gives? once you find out, write a failing test for it, then fix it, then verify the test passes.

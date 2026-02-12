@@ -69,6 +69,8 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    websites: Website;
+    pages: Page;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -78,6 +80,8 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    websites: WebsitesSelect<false> | WebsitesSelect<true>;
+    pages: PagesSelect<false> | PagesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -120,6 +124,18 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: number;
+  /**
+   * User role determines their permissions across the platform
+   */
+  role?: ('super-admin' | 'website-admin' | 'editor' | 'viewer') | null;
+  /**
+   * Websites this user can access
+   */
+  websites?: (number | Website)[] | null;
+  /**
+   * Primary website for this user (used when creating content)
+   */
+  defaultWebsite?: (number | null) | Website;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -140,12 +156,64 @@ export interface User {
   collection: 'users';
 }
 /**
+ * Manage all websites in the multi-tenant system
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "websites".
+ */
+export interface Website {
+  id: number;
+  /**
+   * Display name for this website (e.g., "Acme Corporation")
+   */
+  name: string;
+  /**
+   * Primary domain for routing (e.g., "acme.com")
+   */
+  domain: string;
+  /**
+   * URL-friendly identifier
+   */
+  slug: string;
+  /**
+   * Website status (soft delete capability)
+   */
+  status: 'active' | 'suspended' | 'archived';
+  /**
+   * Site-specific configuration
+   */
+  settings?: {
+    /**
+     * Website logo
+     */
+    logo?: (number | null) | Media;
+    /**
+     * Primary brand color (hex code)
+     */
+    primaryColor?: string | null;
+    /**
+     * Secondary brand color (hex code)
+     */
+    secondaryColor?: string | null;
+    /**
+     * Google Analytics or other analytics tracking ID
+     */
+    analyticsId?: string | null;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "media".
  */
 export interface Media {
   id: number;
   alt: string;
+  /**
+   * Website this media belongs to
+   */
+  website?: (number | null) | Website;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -155,6 +223,139 @@ export interface Media {
   filesize?: number | null;
   width?: number | null;
   height?: number | null;
+}
+/**
+ * Manage website pages with flexible content blocks
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pages".
+ */
+export interface Page {
+  id: number;
+  /**
+   * Page title
+   */
+  title: string;
+  /**
+   * URL slug for this page
+   */
+  slug: string;
+  /**
+   * Website this page belongs to
+   */
+  website?: (number | null) | Website;
+  /**
+   * Build your page using flexible content blocks
+   */
+  layout?:
+    | (
+        | {
+            /**
+             * Main heading text
+             */
+            heading: string;
+            /**
+             * Supporting text below the heading
+             */
+            subheading?: string | null;
+            /**
+             * Hero background or featured image
+             */
+            image?: (number | null) | Media;
+            /**
+             * Call-to-action button text
+             */
+            ctaText?: string | null;
+            /**
+             * Call-to-action button URL
+             */
+            ctaLink?: string | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'hero';
+          }
+        | {
+            /**
+             * Rich text content
+             */
+            content: {
+              root: {
+                type: string;
+                children: {
+                  type: any;
+                  version: number;
+                  [k: string]: unknown;
+                }[];
+                direction: ('ltr' | 'rtl') | null;
+                format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+                indent: number;
+                version: number;
+              };
+              [k: string]: unknown;
+            };
+            /**
+             * Content width on the page
+             */
+            width?: ('narrow' | 'normal' | 'wide' | 'full') | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'content';
+          }
+        | {
+            images: {
+              image: number | Media;
+              /**
+               * Optional image caption
+               */
+              caption?: string | null;
+              id?: string | null;
+            }[];
+            /**
+             * Number of columns in the gallery (1-6)
+             */
+            columns: number;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'imageGallery';
+          }
+        | {
+            /**
+             * CTA heading
+             */
+            heading: string;
+            /**
+             * Supporting description text
+             */
+            description?: string | null;
+            primaryButton: {
+              text: string;
+              link: string;
+            };
+            secondaryButton?: {
+              text?: string | null;
+              link?: string | null;
+            };
+            /**
+             * Background color for the CTA section
+             */
+            backgroundColor?: ('default' | 'primary' | 'secondary' | 'dark') | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'callToAction';
+          }
+      )[]
+    | null;
+  /**
+   * SEO meta description
+   */
+  metaDescription?: string | null;
+  /**
+   * Publication date
+   */
+  publishedDate?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -187,6 +388,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'websites';
+        value: number | Website;
+      } | null)
+    | ({
+        relationTo: 'pages';
+        value: number | Page;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -235,6 +444,9 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  role?: T;
+  websites?: T;
+  defaultWebsite?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -258,6 +470,7 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface MediaSelect<T extends boolean = true> {
   alt?: T;
+  website?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;
@@ -267,6 +480,98 @@ export interface MediaSelect<T extends boolean = true> {
   filesize?: T;
   width?: T;
   height?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "websites_select".
+ */
+export interface WebsitesSelect<T extends boolean = true> {
+  name?: T;
+  domain?: T;
+  slug?: T;
+  status?: T;
+  settings?:
+    | T
+    | {
+        logo?: T;
+        primaryColor?: T;
+        secondaryColor?: T;
+        analyticsId?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pages_select".
+ */
+export interface PagesSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  website?: T;
+  layout?:
+    | T
+    | {
+        hero?:
+          | T
+          | {
+              heading?: T;
+              subheading?: T;
+              image?: T;
+              ctaText?: T;
+              ctaLink?: T;
+              id?: T;
+              blockName?: T;
+            };
+        content?:
+          | T
+          | {
+              content?: T;
+              width?: T;
+              id?: T;
+              blockName?: T;
+            };
+        imageGallery?:
+          | T
+          | {
+              images?:
+                | T
+                | {
+                    image?: T;
+                    caption?: T;
+                    id?: T;
+                  };
+              columns?: T;
+              id?: T;
+              blockName?: T;
+            };
+        callToAction?:
+          | T
+          | {
+              heading?: T;
+              description?: T;
+              primaryButton?:
+                | T
+                | {
+                    text?: T;
+                    link?: T;
+                  };
+              secondaryButton?:
+                | T
+                | {
+                    text?: T;
+                    link?: T;
+                  };
+              backgroundColor?: T;
+              id?: T;
+              blockName?: T;
+            };
+      };
+  metaDescription?: T;
+  publishedDate?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
