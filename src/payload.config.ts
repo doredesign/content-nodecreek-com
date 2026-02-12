@@ -3,6 +3,7 @@ import path from 'path'
 import { sqliteD1Adapter } from '@payloadcms/db-d1-sqlite'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { buildConfig } from 'payload'
+import type { EmailAdapter } from 'payload'
 import { fileURLToPath } from 'url'
 import { CloudflareContext, getCloudflareContext } from '@opennextjs/cloudflare'
 import { GetPlatformProxyOptions } from 'wrangler'
@@ -16,7 +17,7 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 const realpath = (value: string) => (fs.existsSync(value) ? fs.realpathSync(value) : undefined)
 
-const isCLI = process.argv.some((value) => realpath(value).endsWith(path.join('payload', 'bin.js')))
+const isCLI = process.argv.some((value) => realpath(value)?.endsWith(path.join('payload', 'bin.js')))
 const isProduction = process.env.NODE_ENV === 'production'
 
 const cloudflare =
@@ -24,8 +25,40 @@ const cloudflare =
     ? await getCloudflareContextFromWrangler()
     : await getCloudflareContext({ async: true })
 
-// Initialize Resend
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
+// Resend email adapter
+const resendAdapter: EmailAdapter | undefined = process.env.RESEND_API_KEY
+  ? () => {
+      const resend = new Resend(process.env.RESEND_API_KEY!)
+
+      return {
+        name: 'resend',
+        defaultFromAddress: process.env.EMAIL_FROM_ADDRESS || 'noreply@nodecreek.com',
+        defaultFromName: process.env.EMAIL_FROM_NAME || 'Payload CMS',
+        sendEmail: async (message) => {
+          const from = message.from
+            ? typeof message.from === 'string'
+              ? message.from
+              : `${(message.from as { name?: string; address?: string }).name || process.env.EMAIL_FROM_NAME} <${(message.from as { name?: string; address?: string }).address || process.env.EMAIL_FROM_ADDRESS}>`
+            : `${process.env.EMAIL_FROM_NAME} <${process.env.EMAIL_FROM_ADDRESS}>`
+
+          const to = Array.isArray(message.to)
+            ? message.to.map((t: string | { address: string }) => (typeof t === 'string' ? t : t.address))
+            : typeof message.to === 'string'
+              ? [message.to]
+              : [(message.to as { address: string }).address]
+
+          return await resend.emails.send({
+            from,
+            to,
+            subject: message.subject || '',
+            html: message.html as string || '',
+            text: message.text as string,
+            replyTo: process.env.EMAIL_REPLY_TO || undefined,
+          })
+        },
+      }
+    }
+  : undefined
 
 export default buildConfig({
   admin: {
@@ -41,28 +74,11 @@ export default buildConfig({
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   db: sqliteD1Adapter({ binding: cloudflare.env.D1 }),
-  email: resend
-    ? {
-        fromName: process.env.EMAIL_FROM_NAME || 'Payload CMS',
-        fromAddress: process.env.EMAIL_FROM_ADDRESS || 'noreply@yourdomain.com',
-        transportOptions: resend,
-        transport: async (message) => {
-          if (!resend) return
-
-          await resend.emails.send({
-            from: `${message.from.name || 'Payload CMS'} <${message.from.address}>`,
-            to: Array.isArray(message.to) ? message.to.map((t) => t.address) : [message.to.address],
-            subject: message.subject,
-            html: message.html,
-            text: message.text,
-            reply_to: process.env.EMAIL_REPLY_TO || undefined,
-          })
-        },
-      }
-    : undefined,
+  email: resendAdapter,
   plugins: [
     r2Storage({
-      bucket: cloudflare.env.R2 as any,
+      // @ts-expect-error - R2Bucket type mismatch between Cloudflare Workers and Payload
+      bucket: cloudflare.env.R2,
       collections: { media: true },
     }),
   ],
