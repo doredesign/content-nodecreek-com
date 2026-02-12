@@ -1,5 +1,21 @@
 import type { CollectionConfig } from 'payload'
 
+/**
+ * Helper function to extract website IDs from user.websites array
+ * Handles both populated objects and ID strings
+ */
+function extractWebsiteIds(websites: any[]): string[] {
+  if (!websites) return []
+  return websites.map((website) => {
+    // Handle populated objects
+    if (typeof website === 'object' && website !== null) {
+      return website.id || website._id || website
+    }
+    // Handle ID strings
+    return website
+  }).filter(Boolean)
+}
+
 export const Users: CollectionConfig = {
   slug: 'users',
   admin: {
@@ -14,9 +30,10 @@ export const Users: CollectionConfig = {
       if (user.role === 'super-admin') return true
 
       // Users can see other users who share at least one website
+      const websiteIds = extractWebsiteIds(user.websites || [])
       return {
         websites: {
-          in: user.websites || [],
+          in: websiteIds,
         },
       }
     },
@@ -31,9 +48,10 @@ export const Users: CollectionConfig = {
       if (user.role === 'super-admin') return true
 
       if (user.role === 'website-admin') {
+        const websiteIds = extractWebsiteIds(user.websites || [])
         return {
           websites: {
-            in: user.websites || [],
+            in: websiteIds,
           },
         }
       }
